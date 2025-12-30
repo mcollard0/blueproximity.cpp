@@ -15,6 +15,8 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
+	@echo "Setting capabilities..."
+	-sudo setcap 'cap_net_raw,cap_net_admin+eip' $(TARGET) || echo "Warning: Failed to set capabilities."
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
