@@ -1,0 +1,16 @@
+lock_distance=30
+unlock_distance=20
+lock_duration=3
+unlock_duration=2
+lock_cmd=loginctl lock-session
+unlock_cmd=loginctl unlock-session
+prox_cmd=xset dpms force on
+prox_interval=60
+buffer_size=1
+debug=true
+
+[DEVICE]
+mac=FF:FF:FF:FF:FF:FF
+name=
+channel=4
+is_ble=false
