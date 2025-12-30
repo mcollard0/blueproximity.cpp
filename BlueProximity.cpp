@@ -191,7 +191,7 @@ bool BlueProximity::connect() {
     status = ::connect(socket_fd, (struct sockaddr *)&addr, sizeof(addr));
 
     if (status < 0) {
-        // perror("connect"); // Don't spam stderr on connection failure
+        if (config.debug) perror("connect"); 
         close(socket_fd);
         socket_fd = -1;
         return false;
@@ -216,6 +216,7 @@ int BlueProximity::get_hci_conn_handle(int dev_id, const char* addr) {
     ci = cl->conn_info;
 
     if (ioctl(hci_socket, HCIGETCONNLIST, (void *)cl)) {
+        if (config.debug) perror("HCIGETCONNLIST");
         free(cl);
         return -1;
     }
@@ -229,6 +230,7 @@ int BlueProximity::get_hci_conn_handle(int dev_id, const char* addr) {
         }
     }
 
+    if (config.debug) std::cerr << "Connection handle not found for " << addr << std::endl;
     free(cl);
     return -1;
 }
@@ -238,10 +240,14 @@ int BlueProximity::read_rssi(int& rssi_value) {
 
     // Get handle
     int handle = get_hci_conn_handle(dev_id, config.mac_address.c_str());
-    if (handle < 0) return -1;
+    if (handle < 0) {
+        if (config.debug) std::cerr << "Failed to get HCI handle for " << config.mac_address << std::endl;
+        return -1;
+    }
 
     int8_t rssi;
     if (hci_read_rssi(hci_socket, handle, &rssi, 1000) < 0) {
+        if (config.debug) perror("hci_read_rssi");
         return -1;
     }
 
