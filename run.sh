@@ -10,9 +10,8 @@
 # Channel: 4 (Handsfree Service - Stable)
 
 ./BlueProximity \
-    --lock-distance 100 \
-    --unlock-distance 85 \
+    --lock-distance 30 \
+    --unlock-distance 20 \
     --unlock-duration 2 \
-    --channel 19 --btmac 6C:AC:C2:D5:24:AB \
     --channel 4  --btmac 24:24:B7:9F:1B:47 \
     "$@"

@@ -191,7 +191,24 @@ bool BlueProximity::connect() {
     status = ::connect(socket_fd, (struct sockaddr *)&addr, sizeof(addr));
 
     if (status < 0) {
-        if (config.debug) perror("connect"); 
+        if (errno == EBUSY) {
+            if (config.debug) std::cout << "Device " << config.mac_address << " busy. Attempting to force disconnect via bluetoothctl..." << std::endl;
+            close(socket_fd);
+            socket_fd = -1;
+            
+            // Try to disconnect using bluetoothctl
+            std::string cmd = "bluetoothctl disconnect " + config.mac_address;
+            int ret = system(cmd.c_str());
+            if (ret == 0) {
+                 if (config.debug) std::cout << "Disconnect command sent successfully." << std::endl;
+                 // We can't immediately reconnect, let the next update cycle handle it
+            }
+            return false; 
+        }
+
+        if (config.debug) {
+            std::cerr << "Connect failed for " << config.mac_address << ": " << strerror(errno) << std::endl;
+        }
         close(socket_fd);
         socket_fd = -1;
         return false;

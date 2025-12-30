@@ -182,6 +182,7 @@ int main(int argc, char* argv[]) {
         }
         for (const auto& cfg : cmd_devices) {
             BlueProximity::Config final_cfg = cfg;
+            final_cfg.debug = base_config.debug; // Force debug update from base_config
             final_cfg.name_padding = max_name_len;
             monitors.push_back(new BlueProximity(final_cfg));
             
