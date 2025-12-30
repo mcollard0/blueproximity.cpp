@@ -64,3 +64,7 @@ Options:
 ## Configuration
 
 Configuration is automatically saved to `~/.blueproximity/config` after the first run with valid arguments, or can be managed via command-line arguments.
+
+## Known Issues
+
+On my phone it showed an "unable to connect message" which got annoying fast. I just used my watch. It worked well enough for a holiday time off passion project. 
