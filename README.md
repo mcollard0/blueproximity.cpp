@@ -26,6 +26,16 @@ make
 
 This will produce the `BlueProximity` executable.
 
+## Permissions
+
+To access the Bluetooth hardware and read RSSI values without running as root, you must grant the binary the necessary capabilities:
+
+```bash
+sudo setcap 'cap_net_raw,cap_net_admin+eip' BlueProximity
+```
+
+Alternatively, you can run the application with `sudo`.
+
 ## Usage
 
 Run the application with your device's MAC address:
