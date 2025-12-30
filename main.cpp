@@ -1,0 +1,288 @@
+#include "BlueProximity.hpp"
+#include "ConfigFile.hpp"
+#include <iostream>
+#include <string>
+#include <vector>
+#include <getopt.h>
+#include <unistd.h>
+#include <cstdlib>
+#include <pwd.h>
+#include <iomanip>
+#include <sys/wait.h>
+
+std::string get_config_path() {
+    const char* home = getenv("HOME");
+    if (!home) {
+        struct passwd* pw = getpwuid(getuid());
+        if (pw) home = pw->pw_dir;
+    }
+    return std::string(home) + "/.blueproximity/config";
+}
+
+void print_help(const char* prog_name) {
+    std::cout << "Usage: " << prog_name << " [options]\n"
+              << "Options:\n"
+              << "  -m, --mac, --btmac <address> Bluetooth MAC address (can be specified multiple times)\n"
+              << "  --blemac <address>           Bluetooth Low Energy MAC address (can be specified multiple times)\n"
+              << "  -c, --channel <channel>      RFCOMM channel (default: 1, ignored for BLE)\n"
+              << "  --lock-distance <dist>       Distance to lock (default: 7)\n"
+              << "  --unlock-distance <dist>     Distance to unlock (default: 4)\n"
+              << "  --lock-duration <secs>       Duration to lock (default: 6)\n"
+              << "  --unlock-duration <secs>     Duration to unlock (default: 1)\n"
+              << "  --lock-cmd <command>         Command to lock screen\n"
+              << "  --unlock-cmd <command>       Command to unlock screen\n"
+              << "  --prox-cmd <command>         Command to run when in proximity\n"
+              << "  --prox-interval <secs>       Interval for proximity command (default: 60)\n"
+              << "  --buffer-size <size>         RSSI buffer size (default: 1)\n"
+              << "  -d, --debug                  Enable debug output (AT commands)\n"
+              << "  -h, --help                   Show this help message\n";
+}
+
+void execute_command(const std::string& cmd) {
+    if (cmd.empty()) return;
+    std::cout << "[ SYSTEM ] Executing: " << cmd << std::endl;
+    std::string bg_cmd = cmd + " &";
+    int ret = system(bg_cmd.c_str());
+    if (ret == -1) {
+        std::cerr << "Error: system() call failed (fork failure)" << std::endl;
+    } else {
+        if (WIFEXITED(ret)) {
+            int exit_status = WEXITSTATUS(ret);
+            if (exit_status != 0) {
+                std::cerr << "Warning: Command launch shell returned non-zero: " << exit_status << std::endl;
+            }
+        }
+    }
+}
+
+int main(int argc, char* argv[]) {
+    std::string config_path = get_config_path();
+    ConfigFile::GlobalConfig config = ConfigFile::load(config_path);
+    
+    bool config_changed = false;
+    std::vector<BlueProximity::Config> cmd_devices;
+
+    BlueProximity::Config base_config;
+    base_config.lock_distance = config.lock_distance;
+    base_config.unlock_distance = config.unlock_distance;
+    base_config.lock_duration = config.lock_duration;
+    base_config.unlock_duration = config.unlock_duration;
+    base_config.lock_command = config.lock_cmd;
+    base_config.unlock_command = config.unlock_cmd;
+    base_config.proximity_command = config.prox_cmd;
+    base_config.proximity_interval = config.prox_interval;
+    base_config.buffer_size = config.buffer_size;
+    base_config.debug = config.debug;
+
+    static struct option long_options[] = {
+        {"mac",             required_argument, 0, 'm'},
+        {"btmac",           required_argument, 0, 'm'},
+        {"blemac",          required_argument, 0, 'M'},
+        {"channel",         required_argument, 0, 'c'},
+        {"lock-distance",   required_argument, 0, 'L'},
+        {"unlock-distance", required_argument, 0, 'U'},
+        {"lock-duration",   required_argument, 0, 'l'},
+        {"unlock-duration", required_argument, 0, 'u'},
+        {"lock-cmd",        required_argument, 0, '1'},
+        {"unlock-cmd",      required_argument, 0, '2'},
+        {"prox-cmd",        required_argument, 0, '3'},
+        {"prox-interval",   required_argument, 0, 'i'},
+        {"buffer-size",     required_argument, 0, 'b'},
+        {"debug",           no_argument,       0, 'd'},
+        {"help",            no_argument,       0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    int long_index = 0;
+    while ((opt = getopt_long(argc, argv, "m:M:c:h:d", long_options, &long_index)) != -1) {
+        switch (opt) {
+            case 'm': {
+                std::cout << "Adding Classic Device (CLI): " << optarg << std::endl;
+                BlueProximity::Config cfg = base_config;
+                cfg.mac_address = optarg;
+                cfg.is_ble = false;
+                cmd_devices.push_back(cfg);
+                config_changed = true;
+                break;
+            }
+            case 'M': {
+                std::cout << "Adding BLE Device (CLI): " << optarg << std::endl;
+                BlueProximity::Config cfg = base_config;
+                cfg.mac_address = optarg;
+                cfg.is_ble = true;
+                cmd_devices.push_back(cfg);
+                config_changed = true;
+                break;
+            }
+            case 'c': base_config.channel = std::atoi(optarg); config.devices.clear(); break; 
+            case 'L': base_config.lock_distance = config.lock_distance = std::atoi(optarg); config_changed = true; break;
+            case 'U': base_config.unlock_distance = config.unlock_distance = std::atoi(optarg); config_changed = true; break;
+            case 'l': base_config.lock_duration = config.lock_duration = std::atoi(optarg); config_changed = true; break;
+            case 'u': base_config.unlock_duration = config.unlock_duration = std::atoi(optarg); config_changed = true; break;
+            case '1': base_config.lock_command = config.lock_cmd = optarg; config_changed = true; break;
+            case '2': base_config.unlock_command = config.unlock_cmd = optarg; config_changed = true; break;
+            case '3': base_config.proximity_command = config.prox_cmd = optarg; config_changed = true; break;
+            case 'i': base_config.proximity_interval = config.prox_interval = std::atoi(optarg); config_changed = true; break;
+            case 'b': base_config.buffer_size = config.buffer_size = std::atoi(optarg); config_changed = true; break;
+            case 'd': base_config.debug = config.debug = true; config_changed = true; break;
+            case 'h': print_help(argv[0]); return 0;
+            default: print_help(argv[0]); return 1;
+        }
+    }
+    
+    std::vector<BlueProximity*> monitors;
+    size_t max_name_len = 0;
+    auto update_len = [&](const std::string& name, const std::string& mac) {
+        size_t len = name.empty() ? mac.length() : name.length();
+        if (len > max_name_len) max_name_len = len;
+    };
+
+    if (cmd_devices.empty()) {
+        if (config.devices.empty()) {
+            std::cout << "No devices configured. Scanning..." << std::endl;
+            auto scanned = BlueProximity::scan_devices();
+            if (scanned.empty()) {
+                std::cerr << "No devices found during scan." << std::endl;
+                return 1;
+            }
+            std::cout << "Found devices:\n";
+            for (size_t i = 0; i < scanned.size(); ++i) {
+                std::cout << i + 1 << ". " << scanned[i].name << " (" << scanned[i].mac << ")\n";
+            }
+            std::cout << "Enter number for Primary device (0 to skip): ";
+            int choice;
+            if (std::cin >> choice && choice > 0 && choice <= (int)scanned.size()) {
+                ConfigFile::DeviceConfig dc;
+                dc.mac = scanned[choice-1].mac;
+                dc.name = scanned[choice-1].name;
+                dc.is_ble = false; 
+                dc.channel = 1; 
+                config.devices.push_back(dc);
+                config_changed = true;
+            }
+        }
+        for (const auto& dev : config.devices) {
+            update_len(dev.name, dev.mac);
+        }
+        for (const auto& dev : config.devices) {
+            std::cout << "Loading Device (Config): " << (dev.name.empty() ? dev.mac : dev.name) << " (" << dev.mac << ")" << std::endl;
+            BlueProximity::Config cfg = base_config;
+            cfg.mac_address = dev.mac;
+            cfg.name = dev.name;
+            cfg.is_ble = dev.is_ble;
+            cfg.channel = dev.channel;
+            cfg.name_padding = max_name_len;
+            monitors.push_back(new BlueProximity(cfg));
+        }
+    } else {
+        config.devices.clear(); 
+        for (const auto& cfg : cmd_devices) {
+            update_len(cfg.name, cfg.mac_address);
+        }
+        for (const auto& cfg : cmd_devices) {
+            BlueProximity::Config final_cfg = cfg;
+            final_cfg.name_padding = max_name_len;
+            monitors.push_back(new BlueProximity(final_cfg));
+            
+            ConfigFile::DeviceConfig dc;
+            dc.mac = cfg.mac_address;
+            dc.name = cfg.name;
+            dc.is_ble = cfg.is_ble;
+            dc.channel = cfg.channel;
+            config.devices.push_back(dc);
+        }
+        config_changed = true; 
+    }
+
+    if (monitors.empty()) {
+        std::cerr << "Error: No devices configured or selected.\n";
+        return 1;
+    }
+    
+    if (config_changed) {
+        std::string dir = config_path.substr(0, config_path.find_last_of('/'));
+        std::string cmd = "mkdir -p " + dir;
+        int ret = system(cmd.c_str());
+        if (ret != 0) std::cerr << "Warning: Failed to create config directory.\n";
+        std::cout << "Saving configuration to " << config_path << std::endl;
+        ConfigFile::save(config_path, config);
+    }
+    
+    std::cout << "Starting monitoring loop..." << std::endl;
+
+    enum State { GONE, ACTIVE };
+    State current_state = GONE;
+    int duration_count = 0;
+    time_t last_prox_time = 0;
+
+    int lock_threshold = -config.lock_distance;
+    int unlock_threshold = -config.unlock_distance;
+
+    while (true) {
+        double best_avg_rssi = -255.0;
+        
+        // Update all monitors and find best signal
+        for (auto* monitor : monitors) {
+            monitor->update(); // prints status
+            double avg = monitor->get_average_rssi();
+            if (avg > best_avg_rssi) {
+                best_avg_rssi = avg;
+            }
+        }
+
+        // Global State Machine Logic
+        int required_duration = (current_state == ACTIVE) ? config.lock_duration : config.unlock_duration;
+        
+        if (current_state == ACTIVE) {
+            // Check if we should lock
+            if (best_avg_rssi <= lock_threshold) {
+                duration_count++;
+                if (duration_count >= config.lock_duration) {
+                    std::cout << "[ SYSTEM ] Transitioning to GONE (Locking)" << std::endl;
+                    current_state = GONE;
+                    execute_command(config.lock_cmd);
+                    duration_count = 0;
+                }
+            } else {
+                duration_count = 0; // Reset if any signal is good
+            }
+        } else {
+            // Check if we should unlock
+            if (best_avg_rssi >= unlock_threshold && best_avg_rssi != -255.0) {
+                duration_count++;
+                if (duration_count >= config.unlock_duration) {
+                    std::cout << "[ SYSTEM ] Transitioning to ACTIVE (Unlocking)" << std::endl;
+                    current_state = ACTIVE;
+                    execute_command(config.unlock_cmd);
+                    duration_count = 0;
+                }
+            } else {
+                duration_count = 0;
+            }
+        }
+
+        // Proximity Command
+        if (current_state == ACTIVE && !config.prox_cmd.empty()) {
+            time_t now = time(NULL);
+            if (now - last_prox_time >= config.prox_interval) {
+                execute_command(config.prox_cmd);
+                last_prox_time = now;
+            }
+        }
+
+        // Display Aggregated Status
+        std::cout << "[ SYSTEM        ] Best Avg RSSI: " << std::fixed << std::setprecision(1) << std::setw(5) << best_avg_rssi 
+                  << " Conf: " << duration_count << "/" << required_duration
+                  << " State: " << (current_state == ACTIVE ? "ACTIVE" : "GONE") << std::endl;
+        std::cout << "------------------------------------------------------------" << std::endl;
+
+        sleep(1); 
+    }
+
+    for (auto* monitor : monitors) {
+        delete monitor;
+    }
+
+    return 0;
+}

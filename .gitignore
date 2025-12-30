@@ -1,0 +1,6 @@
+backup/
+*.o
+BlueProximity
+blueproximity.cpp
+test_bt
+*.log
