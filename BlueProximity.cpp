@@ -1,3 +1,5 @@
+/* COnsider std::endl mitigation for perf. */
+
 #include "BlueProximity.hpp"
 #include <iostream>
 #include <unistd.h>
