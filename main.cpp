@@ -97,6 +97,7 @@ std::string detect_desktop_environment() {
         if ( desktop.find( "gnome" ) != std::string::npos ) return "gnome";
         if ( desktop.find( "kde" ) != std::string::npos ) return "kde";
         if ( desktop.find( "plasma" ) != std::string::npos ) return "kde";
+        if ( desktop.find( "cosmic" ) != std::string::npos ) return "cosmic";
     }
     
     // Check DESKTOP_SESSION
@@ -108,6 +109,7 @@ std::string detect_desktop_environment() {
         if ( sess.find( "gnome" ) != std::string::npos ) return "gnome";
         if ( sess.find( "kde" ) != std::string::npos ) return "kde";
         if ( sess.find( "plasma" ) != std::string::npos ) return "kde";
+        if ( sess.find( "cosmic" ) != std::string::npos ) return "cosmic";
     }
     
     // Check for running processes
@@ -116,6 +118,9 @@ std::string detect_desktop_environment() {
     
     std::string kde_check = exec_command_output( "pgrep -x plasmashell > /dev/null 2>&1 && echo kde" );
     if ( !kde_check.empty() ) return "kde";
+    
+    std::string cosmic_check = exec_command_output( "pgrep -x cosmic-comp > /dev/null 2>&1 && echo cosmic" );
+    if ( !cosmic_check.empty() ) return "cosmic";
     
     return "unknown";
 }
@@ -139,6 +144,10 @@ void setup_desktop_commands( ConfigFile::GlobalConfig& config ) {
             if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
             if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
             if ( config.prox_cmd.empty() ) config.prox_cmd = "qdbus org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver.SimulateUserActivity";
+        } else if ( config.desktop_environment == "cosmic" ) {
+            if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
+            if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "loginctl unlock-session"; // Keep screen awake by simulating activity
         } else {
             // Unknown/custom DE - use loginctl as fallback
             if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
