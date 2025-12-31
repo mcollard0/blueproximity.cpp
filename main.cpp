@@ -9,14 +9,81 @@
 #include <pwd.h>
 #include <iomanip>
 #include <sys/wait.h>
+#include <ctime>
+#include <array>
+#include <sstream>
 
 std::string get_config_path() {
-    const char* home = getenv("HOME");
-    if (!home) {
-        struct passwd* pw = getpwuid(getuid());
-        if (pw) home = pw->pw_dir;
+    const char* home = getenv( "HOME" );
+    if ( !home ) {
+        struct passwd* pw = getpwuid( getuid() );
+        if ( pw ) home = pw->pw_dir;
     }
-    return std::string(home) + "/.blueproximity/config";
+    return std::string( home ) + "/.blueproximity/config";
+}
+
+std::string exec_command_output( const char* cmd ) {
+    std::array<char, 128> buffer;
+    std::string result;
+    FILE* pipe = popen( cmd, "r" );
+    if ( !pipe ) return "";
+    
+    while ( fgets( buffer.data(), buffer.size(), pipe ) != nullptr ) {
+        result += buffer.data();
+    }
+    pclose( pipe );
+    
+    // Trim trailing newline/whitespace
+    while ( !result.empty() && ( result.back() == '\n' || result.back() == '\r' || result.back() == ' ' ) ) {
+        result.pop_back();
+    }
+    return result;
+}
+
+struct SessionInfo {
+    std::string username;
+    std::string session_id;
+    bool valid;
+};
+
+SessionInfo get_session_info() {
+    SessionInfo info;
+    info.valid = false;
+    
+    // Get username
+    const char* user = getenv( "USER" );
+    if ( !user ) {
+        struct passwd* pw = getpwuid( getuid() );
+        if ( pw ) user = pw->pw_name;
+    }
+    if ( !user ) {
+        std::cerr << "Warning: Could not determine username" << std::endl;
+        return info;
+    }
+    info.username = user;
+    
+    // Get session ID
+    std::string cmd = "loginctl list-sessions --no-legend | grep " + info.username + " | awk '{print $1}' | head -n1";
+    info.session_id = exec_command_output( cmd.c_str() );
+    
+    if ( info.session_id.empty() ) {
+        std::cerr << "Warning: Could not determine session ID for user " << info.username << std::endl;
+        return info;
+    }
+    
+    info.valid = true;
+    std::cout << "[ SYSTEM ] Session info cached: user=" << info.username 
+              << " session=" << info.session_id << std::endl;
+    return info;
+}
+
+bool is_desktop_locked( const SessionInfo& session ) {
+    if ( !session.valid ) return false; // Assume unlocked if we can't check
+    
+    std::string cmd = "loginctl show-session " + session.session_id + " -p LockedHint";
+    std::string result = exec_command_output( cmd.c_str() );
+    
+    return ( result.find( "LockedHint=yes" ) != std::string::npos );
 }
 
 void print_help(const char* prog_name) {
@@ -38,17 +105,17 @@ void print_help(const char* prog_name) {
               << "  -h, --help                   Show this help message\n";
 }
 
-void execute_command(const std::string& cmd) {
-    if (cmd.empty()) return;
+void execute_command( const std::string& cmd ) {
+    if ( cmd.empty() ) return;
     std::cout << "[ SYSTEM ] Executing: " << cmd << std::endl;
     std::string bg_cmd = cmd + " &";
-    int ret = system(bg_cmd.c_str());
-    if (ret == -1) {
+    int ret = system( bg_cmd.c_str() );
+    if ( ret == -1 ) {
         std::cerr << "Error: system() call failed (fork failure)" << std::endl;
     } else {
-        if (WIFEXITED(ret)) {
-            int exit_status = WEXITSTATUS(ret);
-            if (exit_status != 0) {
+        if ( WIFEXITED( ret ) ) {
+            int exit_status = WEXITSTATUS( ret );
+            if ( exit_status != 0 ) {
                 std::cerr << "Warning: Command launch shell returned non-zero: " << exit_status << std::endl;
             }
         }
@@ -210,39 +277,80 @@ int main(int argc, char* argv[]) {
         ConfigFile::save(config_path, config);
     }
     
+    // Cache session info at startup
+    SessionInfo session = get_session_info();
+    if ( !session.valid ) {
+        std::cerr << "Warning: Session info unavailable. Lock state sync will be disabled." << std::endl;
+    }
+    
     std::cout << "Starting monitoring loop..." << std::endl;
 
     enum State { GONE, ACTIVE };
     State current_state = GONE;
     int duration_count = 0;
     time_t last_prox_time = 0;
+    time_t last_lock_check = 0;
+    const int LOCK_CHECK_INTERVAL = 30; // Check lock state every 30 seconds
 
     int lock_threshold = -config.lock_distance;
     int unlock_threshold = -config.unlock_distance;
 
-    while (true) {
+    while ( true ) {
+        time_t now = time( NULL );
         double best_avg_rssi = -255.0;
         
-        // Update all monitors and find best signal
-        for (auto* monitor : monitors) {
+        // Update all monitors and find best signal FIRST
+        for ( auto* monitor : monitors ) {
             monitor->update(); // prints status
             double avg = monitor->get_average_rssi();
-            if (avg > best_avg_rssi) {
+            if ( avg > best_avg_rssi ) {
                 best_avg_rssi = avg;
             }
         }
+        
+        // Periodically check actual desktop lock state to sync with system
+        if ( session.valid && ( now - last_lock_check >= LOCK_CHECK_INTERVAL ) ) {
+            bool desktop_locked = is_desktop_locked( session );
+            State expected_state = desktop_locked ? GONE : ACTIVE;
+            
+            if ( current_state != expected_state ) {
+                std::cout << "[ SYSTEM ] Desktop lock state mismatch detected. ";
+                std::cout << "Desktop is " << ( desktop_locked ? "LOCKED" : "UNLOCKED" );
+                std::cout << ", internal state was " << ( current_state == ACTIVE ? "ACTIVE" : "GONE" );
+                std::cout << ". Syncing..." << std::endl;
+                
+                // Smart duration_count handling based on RSSI and transition direction
+                if ( current_state == ACTIVE && expected_state == GONE ) {
+                    // Desktop locked externally while we thought it was unlocked
+                    // If RSSI is good (above unlock threshold), start unlock counter at 1
+                    if ( best_avg_rssi >= unlock_threshold && best_avg_rssi != -255.0 ) {
+                        duration_count = 1;
+                        std::cout << "[ SYSTEM ] RSSI is good (" << best_avg_rssi 
+                                  << "), starting unlock counter at 1" << std::endl;
+                    } else {
+                        duration_count = 0;
+                    }
+                } else {
+                    // Any other transition: reset to 0
+                    duration_count = 0;
+                }
+                
+                current_state = expected_state;
+            }
+            last_lock_check = now;
+        }
 
         // Global State Machine Logic
-        int required_duration = (current_state == ACTIVE) ? config.lock_duration : config.unlock_duration;
+        int required_duration = ( current_state == ACTIVE ) ? config.lock_duration : config.unlock_duration;
         
-        if (current_state == ACTIVE) {
+        if ( current_state == ACTIVE ) {
             // Check if we should lock
-            if (best_avg_rssi <= lock_threshold) {
+            if ( best_avg_rssi <= lock_threshold ) {
                 duration_count++;
-                if (duration_count >= config.lock_duration) {
+                if ( duration_count >= config.lock_duration ) {
                     std::cout << "[ SYSTEM ] Transitioning to GONE (Locking)" << std::endl;
                     current_state = GONE;
-                    execute_command(config.lock_cmd);
+                    execute_command( config.lock_cmd );
                     duration_count = 0;
                 }
             } else {
@@ -250,12 +358,12 @@ int main(int argc, char* argv[]) {
             }
         } else {
             // Check if we should unlock
-            if (best_avg_rssi >= unlock_threshold && best_avg_rssi != -255.0) {
+            if ( best_avg_rssi >= unlock_threshold && best_avg_rssi != -255.0 ) {
                 duration_count++;
-                if (duration_count >= config.unlock_duration) {
+                if ( duration_count >= config.unlock_duration ) {
                     std::cout << "[ SYSTEM ] Transitioning to ACTIVE (Unlocking)" << std::endl;
                     current_state = ACTIVE;
-                    execute_command(config.unlock_cmd);
+                    execute_command( config.unlock_cmd );
                     duration_count = 0;
                 }
             } else {
@@ -264,24 +372,23 @@ int main(int argc, char* argv[]) {
         }
 
         // Proximity Command
-        if (current_state == ACTIVE && !config.prox_cmd.empty()) {
-            time_t now = time(NULL);
-            if (now - last_prox_time >= config.prox_interval) {
-                execute_command(config.prox_cmd);
+        if ( current_state == ACTIVE && !config.prox_cmd.empty() ) {
+            if ( now - last_prox_time >= config.prox_interval ) {
+                execute_command( config.prox_cmd );
                 last_prox_time = now;
             }
         }
 
         // Display Aggregated Status
-        std::cout << "[ SYSTEM        ] Best Avg RSSI: " << std::fixed << std::setprecision(1) << std::setw(5) << best_avg_rssi 
+        std::cout << "[ SYSTEM        ] Best Avg RSSI: " << std::fixed << std::setprecision( 1 ) << std::setw( 5 ) << best_avg_rssi 
                   << " Conf: " << duration_count << "/" << required_duration
-                  << " State: " << (current_state == ACTIVE ? "ACTIVE" : "GONE") << std::endl;
+                  << " State: " << ( current_state == ACTIVE ? "ACTIVE" : "GONE" ) << std::endl;
         std::cout << "------------------------------------------------------------" << std::endl;
 
-        sleep(1); 
+        sleep( 1 ); 
     }
 
-    for (auto* monitor : monitors) {
+    for ( auto* monitor : monitors ) {
         delete monitor;
     }
 

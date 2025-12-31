@@ -5,6 +5,7 @@ A C++ implementation of the BlueProximity application. This tool monitors the si
 ## Features
 
 - **Proximity Locking/Unlocking**: Automatically executes commands when a device moves out of or into range.
+- **Lock State Synchronization**: Periodically syncs with system lock state to handle timeout-based locks (checks every 30 seconds).
 - **Bluetooth Support**: Supports both Classic Bluetooth and Bluetooth Low Energy (BLE) devices.
 - **Configurable Thresholds**: Customize lock/unlock distances and durations to prevent false triggers.
 - **Custom Commands**: Define your own shell commands for locking, unlocking, and proximity events.
@@ -15,6 +16,23 @@ A C++ implementation of the BlueProximity application. This tool monitors the si
 - Linux system with BlueZ stack.
 - Bluetooth adapter.
 - `libbluetooth-dev` package (for building).
+- `systemd-logind` (for lock state synchronization).
+
+## Compatibility
+
+**Desktop Environments:**
+- ✅ **GNOME/GDM** (Ubuntu, Fedora, RHEL, etc.) - Fully supported
+- ✅ **Unity** - Should work (uses similar infrastructure)
+- ⚠️ **KDE Plasma** - Lock/unlock commands work, but may require different screen locker integration
+- ⚠️ **XFCE/LXDE** - May require custom lock/unlock commands
+- ❌ **Wayland-only sessions** - Limited X11 command support
+
+**Lock State Sync Feature:**
+The automatic lock state synchronization (detecting system timeout locks) uses `loginctl` and works on any systemd-based distribution. This feature helps keep the internal state in sync when the desktop locks due to power-saving settings.
+
+**Tested On:**
+- Ubuntu 22.04+ with GNOME
+- Should work on most modern systemd-based Linux distributions with BlueZ
 
 ## Building
 
