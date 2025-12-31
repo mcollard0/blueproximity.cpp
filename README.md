@@ -95,4 +95,70 @@ Configuration is automatically saved to `~/.blueproximity/config` after the firs
 
 ## Known Issues
 
-On my phone it showed an "unable to connect message" which got annoying fast. I just used my watch. It worked well enough for a holiday time off passion project. 
+On my phone it showed an "unable to connect message" which got annoying fast. I just used my watch. It worked well enough for a holiday time off passion project.
+
+## Technical Debt / Unresolved
+
+### Wayland Support
+
+**Current Status:** Limited - relies on X11 compatibility layer
+
+**The Problem:**
+Wayland's security model is fundamentally different from X11. Key challenges:
+
+1. **No Direct Display Access**: Wayland doesn't allow arbitrary processes to access the display server directly
+2. **Compositor-Specific Protocols**: Each compositor (GNOME Shell, KWin, wlroots-based) has different protocols
+3. **Screen Locking**: No standardized way to lock/unlock screens across compositors
+4. **DPMS Control**: Power management requires compositor-specific extensions
+
+**Potential Solutions:**
+
+1. **Compositor-Specific Implementations**
+   - GNOME/Mutter: Use `gdbus` to communicate with org.gnome.ScreenSaver
+   - KDE/KWin: Use `qdbus` for org.freedesktop.ScreenSaver
+   - wlroots (Sway): Use `swayidle` integration or IPC protocol
+   - Requires detecting compositor and using appropriate method
+
+2. **D-Bus Universal Approach** (Preferred)
+   - Lock: `gdbus call --session --dest org.freedesktop.login1 --object-path /org/freedesktop/login1/session/self --method org.freedesktop.login1.Session.Lock`
+   - Unlock: Similar with `.Unlock`
+   - Already partially implemented via `loginctl` (which uses D-Bus under the hood)
+   - DPMS/proximity: Compositor-specific, may need per-DE detection
+
+3. **XDG Portal Integration** (Future-proof)
+   - Use `org.freedesktop.portal.Inhibit` for preventing sleep
+   - May not cover all use cases (screen lock/unlock)
+   - Still evolving standard
+
+**Implementation Plan:**
+1. Detect session type (X11 vs Wayland) via `$XDG_SESSION_TYPE`
+2. For Wayland sessions:
+   - Use D-Bus directly instead of shell commands
+   - Detect compositor (GNOME Shell, KWin, Sway, etc.)
+   - Use compositor-specific protocols for DPMS/proximity commands
+3. Maintain X11 fallback for compatibility
+4. Add configuration option to override auto-detection
+
+**Effort Estimate:** Medium - Requires D-Bus library integration and testing across multiple compositors
+
+### COSMIC Desktop Support
+
+**Current Status:** Untested
+
+**Background:**
+System76's COSMIC desktop (Rust-based, uses iced framework) is growing in popularity. Based on Wayland with custom compositor.
+
+**Potential Approach:**
+- COSMIC uses its own compositor (cosmic-comp)
+- May support freedesktop D-Bus protocols
+- Lock/unlock likely via `loginctl` (systemd-logind)
+- DPMS/proximity may need COSMIC-specific implementation
+- Monitor COSMIC development for standardized APIs
+
+**Action Items:**
+1. Wait for COSMIC 1.0 stable release
+2. Test current implementation on COSMIC alpha/beta
+3. Add COSMIC-specific detection if needed
+4. Contribute to COSMIC protocols if extensions needed
+
+**Effort Estimate:** Low-Medium - Likely works with current loginctl approach, may need minor tweaks

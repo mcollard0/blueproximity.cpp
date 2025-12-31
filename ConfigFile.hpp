@@ -37,6 +37,7 @@ public:
         int prox_interval = 60;
         int buffer_size = 1;
         bool debug = false;
+        std::string desktop_environment; // "gnome", "kde", or custom
         std::vector<DeviceConfig> devices;
     };
 

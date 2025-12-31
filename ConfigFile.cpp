@@ -39,16 +39,17 @@ ConfigFile::GlobalConfig ConfigFile::load(const std::string& path) {
             else if (key == "channel") current_device.channel = std::stoi(val);
             else if (key == "is_ble") current_device.is_ble = (val == "1" || val == "true");
         } else {
-            if (key == "lock_distance") config.lock_distance = std::stoi(val);
-            else if (key == "unlock_distance") config.unlock_distance = std::stoi(val);
-            else if (key == "lock_duration") config.lock_duration = std::stoi(val);
-            else if (key == "unlock_duration") config.unlock_duration = std::stoi(val);
-            else if (key == "lock_cmd") config.lock_cmd = val;
-            else if (key == "unlock_cmd") config.unlock_cmd = val;
-            else if (key == "prox_cmd") config.prox_cmd = val;
-            else if (key == "prox_interval") config.prox_interval = std::stoi(val);
-            else if (key == "buffer_size") config.buffer_size = std::stoi(val);
-            else if (key == "debug") config.debug = (val == "1" || val == "true");
+            if ( key == "lock_distance" ) config.lock_distance = std::stoi( val );
+            else if ( key == "unlock_distance" ) config.unlock_distance = std::stoi( val );
+            else if ( key == "lock_duration" ) config.lock_duration = std::stoi( val );
+            else if ( key == "unlock_duration" ) config.unlock_duration = std::stoi( val );
+            else if ( key == "lock_cmd" ) config.lock_cmd = val;
+            else if ( key == "unlock_cmd" ) config.unlock_cmd = val;
+            else if ( key == "prox_cmd" ) config.prox_cmd = val;
+            else if ( key == "prox_interval" ) config.prox_interval = std::stoi( val );
+            else if ( key == "buffer_size" ) config.buffer_size = std::stoi( val );
+            else if ( key == "debug" ) config.debug = ( val == "1" || val == "true" );
+            else if ( key == "desktop_environment" ) config.desktop_environment = val;
         }
     }
     if (in_device && !current_device.mac.empty()) {
@@ -58,9 +59,9 @@ ConfigFile::GlobalConfig ConfigFile::load(const std::string& path) {
     return config;
 }
 
-void ConfigFile::save(const std::string& path, const GlobalConfig& config) {
-    std::ofstream file(path);
-    if (!file.is_open()) return;
+void ConfigFile::save( const std::string& path, const GlobalConfig& config ) {
+    std::ofstream file( path );
+    if ( !file.is_open() ) return;
 
     file << "lock_distance=" << config.lock_distance << "\n";
     file << "unlock_distance=" << config.unlock_distance << "\n";
@@ -71,7 +72,10 @@ void ConfigFile::save(const std::string& path, const GlobalConfig& config) {
     file << "prox_cmd=" << config.prox_cmd << "\n";
     file << "prox_interval=" << config.prox_interval << "\n";
     file << "buffer_size=" << config.buffer_size << "\n";
-    file << "debug=" << (config.debug ? "true" : "false") << "\n";
+    file << "debug=" << ( config.debug ? "true" : "false" ) << "\n";
+    if ( !config.desktop_environment.empty() ) {
+        file << "desktop_environment=" << config.desktop_environment << "\n";
+    }
 
     for (const auto& dev : config.devices) {
         file << "\n[DEVICE]\n";

@@ -86,6 +86,68 @@ bool is_desktop_locked( const SessionInfo& session ) {
     return ( result.find( "LockedHint=yes" ) != std::string::npos );
 }
 
+std::string detect_desktop_environment() {
+    // Check XDG_CURRENT_DESKTOP first
+    const char* xdg_desktop = getenv( "XDG_CURRENT_DESKTOP" );
+    if ( xdg_desktop ) {
+        std::string desktop( xdg_desktop );
+        // Convert to lowercase for comparison
+        for ( auto& c : desktop ) c = std::tolower( c );
+        
+        if ( desktop.find( "gnome" ) != std::string::npos ) return "gnome";
+        if ( desktop.find( "kde" ) != std::string::npos ) return "kde";
+        if ( desktop.find( "plasma" ) != std::string::npos ) return "kde";
+    }
+    
+    // Check DESKTOP_SESSION
+    const char* session = getenv( "DESKTOP_SESSION" );
+    if ( session ) {
+        std::string sess( session );
+        for ( auto& c : sess ) c = std::tolower( c );
+        
+        if ( sess.find( "gnome" ) != std::string::npos ) return "gnome";
+        if ( sess.find( "kde" ) != std::string::npos ) return "kde";
+        if ( sess.find( "plasma" ) != std::string::npos ) return "kde";
+    }
+    
+    // Check for running processes
+    std::string gnome_check = exec_command_output( "pgrep -x gnome-shell > /dev/null 2>&1 && echo gnome" );
+    if ( !gnome_check.empty() ) return "gnome";
+    
+    std::string kde_check = exec_command_output( "pgrep -x plasmashell > /dev/null 2>&1 && echo kde" );
+    if ( !kde_check.empty() ) return "kde";
+    
+    return "unknown";
+}
+
+void setup_desktop_commands( ConfigFile::GlobalConfig& config ) {
+    // Only detect if not already set
+    if ( config.desktop_environment.empty() ) {
+        config.desktop_environment = detect_desktop_environment();
+        std::cout << "[ SYSTEM ] Detected desktop environment: " << config.desktop_environment << std::endl;
+    } else {
+        std::cout << "[ SYSTEM ] Using configured desktop environment: " << config.desktop_environment << std::endl;
+    }
+    
+    // Set default commands if not already set
+    if ( config.lock_cmd.empty() || config.unlock_cmd.empty() || config.prox_cmd.empty() ) {
+        if ( config.desktop_environment == "gnome" ) {
+            if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
+            if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "xset dpms force on";
+        } else if ( config.desktop_environment == "kde" ) {
+            if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
+            if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "qdbus org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver.SimulateUserActivity";
+        } else {
+            // Unknown/custom DE - use loginctl as fallback
+            if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
+            if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "xset dpms force on";
+        }
+    }
+}
+
 void print_help(const char* prog_name) {
     std::cout << "Usage: " << prog_name << " [options]\n"
               << "Options:\n"
@@ -125,6 +187,9 @@ void execute_command( const std::string& cmd ) {
 int main(int argc, char* argv[]) {
     std::string config_path = get_config_path();
     ConfigFile::GlobalConfig config = ConfigFile::load(config_path);
+    
+    // Setup desktop environment and default commands
+    setup_desktop_commands( config );
     
     bool config_changed = false;
     std::vector<BlueProximity::Config> cmd_devices;
