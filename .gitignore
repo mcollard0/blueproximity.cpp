@@ -1,6 +1,9 @@
 backup/
 *.o
 BlueProximity
-blueproximity.cpp
+bluepro ximity.cpp
 test_bt
 *.log
+scan_all
+scan_ble
+test_at

@@ -146,19 +146,84 @@ Wayland's security model is fundamentally different from X11. Key challenges:
 **Current Status:** Untested
 
 **Background:**
-System76's COSMIC desktop (Rust-based, uses iced framework) is growing in popularity. Based on Wayland with custom compositor.
+System76's COSMIC desktop (Rust-based, uses iced framework) is growing in popularity. Built on Wayland with custom compositor (cosmic-comp) based on smithay. Currently in alpha/beta, targeting stable release in 2025.
 
-**Potential Approach:**
-- COSMIC uses its own compositor (cosmic-comp)
-- May support freedesktop D-Bus protocols
-- Lock/unlock likely via `loginctl` (systemd-logind)
-- DPMS/proximity may need COSMIC-specific implementation
-- Monitor COSMIC development for standardized APIs
+**Architecture:**
+- **Compositor:** cosmic-comp (Wayland compositor)
+- **Session Manager:** cosmic-session
+- **Screen Locker:** cosmic-greeter (handles both login and lock screen)
+- **Power Management:** Integrates with systemd-logind
+- **Settings:** cosmic-settings for user configuration
 
-**Action Items:**
-1. Wait for COSMIC 1.0 stable release
-2. Test current implementation on COSMIC alpha/beta
-3. Add COSMIC-specific detection if needed
-4. Contribute to COSMIC protocols if extensions needed
+**Implementation Strategy:**
 
-**Effort Estimate:** Low-Medium - Likely works with current loginctl approach, may need minor tweaks
+1. **Lock/Unlock Commands** (High Priority)
+   - **Lock:** `loginctl lock-session` (already implemented)
+   - **Unlock:** `loginctl unlock-session` (already implemented)
+   - COSMIC uses systemd-logind, so current implementation should work
+   - Verify cosmic-greeter responds to loginctl signals
+
+2. **Proximity/DPMS Control** (Medium Priority)
+   - Option A: Use `cosmic-settings` CLI if available
+   - Option B: D-Bus interface to cosmic-comp (if exposed)
+   - Option C: Wayland protocol extension (ext-idle-notify-v1)
+   - Fallback: Keep display alive via mouse/keyboard simulation
+
+3. **Detection** (High Priority)
+   ```bash
+   # Check XDG_CURRENT_DESKTOP
+   echo $XDG_CURRENT_DESKTOP  # Should return "COSMIC"
+   
+   # Check for running processes
+   pgrep -x cosmic-comp
+   pgrep -x cosmic-session
+   ```
+   - Add COSMIC detection to `detect_desktop_environment()`
+   - Set appropriate default commands
+
+4. **Testing Checklist**
+   - [ ] Test on COSMIC Alpha 3+ (Pop!_OS 24.04 Alpha)
+   - [ ] Verify `loginctl lock-session` locks screen
+   - [ ] Verify `loginctl unlock-session` unlocks screen
+   - [ ] Test RSSI-based locking/unlocking
+   - [ ] Verify proximity command keeps screen awake
+   - [ ] Test lock state sync (30-second polling)
+   - [ ] Check for D-Bus interfaces exposed by cosmic-comp
+
+**Implementation Plan:**
+
+**Phase 1: Basic Support (Quick Win)**
+1. Add "cosmic" detection in `detect_desktop_environment()`:
+   ```cpp
+   if ( desktop.find( "cosmic" ) != std::string::npos ) return "cosmic";
+   ```
+2. Set default commands for COSMIC (same as GNOME/KDE):
+   - Lock: `loginctl lock-session`
+   - Unlock: `loginctl unlock-session`
+   - Prox: Try `cosmic-settings` or fallback to no-op
+3. Test on COSMIC Alpha build
+
+**Phase 2: Enhanced Integration (If Needed)**
+1. Research COSMIC D-Bus interfaces
+2. Implement native cosmic-comp communication if available
+3. Add COSMIC-specific proximity commands
+4. Contribute to COSMIC protocols if gaps identified
+
+**Phase 3: Community Feedback**
+1. Release build with COSMIC support
+2. Gather feedback from Pop!_OS/COSMIC users
+3. Iterate based on real-world usage
+
+**Potential Issues:**
+- cosmic-greeter may have different unlock behavior than gdm/sddm
+- Wayland security model may prevent direct screen control
+- Alpha/beta stability - protocols may change before 1.0
+- Limited documentation during alpha phase
+
+**Resources:**
+- COSMIC GitHub: https://github.com/pop-os/cosmic-epoch
+- Pop!_OS Alpha: https://pop.system76.com/
+- cosmic-comp: https://github.com/pop-os/cosmic-comp
+- Smithay compositor library: https://github.com/Smithay/smithay
+
+**Effort Estimate:** Low - Basic support likely works with current code, may need 1-2 hours for detection and testing. Enhanced integration (if needed) would be Medium effort.
