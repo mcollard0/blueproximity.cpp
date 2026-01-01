@@ -51,6 +51,7 @@ ConfigFile::GlobalConfig ConfigFile::load(const std::string& path) {
             else if ( key == "debug" ) config.debug = ( val == "1" || val == "true" );
             else if ( key == "desktop_environment" ) config.desktop_environment = val;
             else if ( key == "display" ) config.display = val;
+            else if ( key == "xauthority" ) config.xauthority = val;
         }
     }
     if (in_device && !current_device.mac.empty()) {
@@ -79,6 +80,9 @@ void ConfigFile::save( const std::string& path, const GlobalConfig& config ) {
     }
     if ( !config.display.empty() ) {
         file << "display=" << config.display << "\n";
+    }
+    if ( !config.xauthority.empty() ) {
+        file << "xauthority=" << config.xauthority << "\n";
     }
 
     for (const auto& dev : config.devices) {

@@ -145,6 +145,28 @@ void setup_desktop_commands( ConfigFile::GlobalConfig& config ) {
         std::cout << "[ SYSTEM ] Using configured DISPLAY: " << config.display << std::endl;
     }
     
+    // Detect and cache XAUTHORITY if not already set
+    if ( config.xauthority.empty() ) {
+        const char* xauth_env = getenv( "XAUTHORITY" );
+        if ( xauth_env ) {
+            config.xauthority = xauth_env;
+            std::cout << "[ SYSTEM ] Detected XAUTHORITY: " << config.xauthority << std::endl;
+        } else {
+            // Default to ~/.Xauthority
+            const char* home = getenv( "HOME" );
+            if ( !home ) {
+                struct passwd* pw = getpwuid( getuid() );
+                if ( pw ) home = pw->pw_dir;
+            }
+            if ( home ) {
+                config.xauthority = std::string( home ) + "/.Xauthority";
+                std::cout << "[ SYSTEM ] XAUTHORITY not set, using default: " << config.xauthority << std::endl;
+            }
+        }
+    } else {
+        std::cout << "[ SYSTEM ] Using configured XAUTHORITY: " << config.xauthority << std::endl;
+    }
+    
     // Only detect if not already set
     if ( config.desktop_environment.empty() ) {
         config.desktop_environment = detect_desktop_environment();
@@ -195,13 +217,17 @@ void print_help(const char* prog_name) {
               << "  -h, --help                   Show this help message\n";
 }
 
-void execute_command( const std::string& cmd, const std::string& display = "" ) {
+void execute_command( const std::string& cmd, const std::string& display = "", const std::string& xauthority = "" ) {
     if ( cmd.empty() ) return;
     std::cout << "[ SYSTEM ] Executing: " << cmd << std::endl;
     
     std::string full_cmd = cmd;
     if ( !display.empty() ) {
-        full_cmd = "DISPLAY=" + display + " " + cmd;
+        full_cmd = "DISPLAY=" + display + " ";
+        if ( !xauthority.empty() ) {
+            full_cmd += "XAUTHORITY=" + xauthority + " ";
+        }
+        full_cmd += cmd;
     }
     
     std::string bg_cmd = full_cmd + " &";
@@ -449,7 +475,7 @@ int main(int argc, char* argv[]) {
                 if ( duration_count >= config.lock_duration ) {
                     std::cout << "[ SYSTEM ] Transitioning to GONE (Locking)" << std::endl;
                     current_state = GONE;
-                    execute_command( config.lock_cmd, config.display );
+                    execute_command( config.lock_cmd, config.display, config.xauthority );
                     duration_count = 0;
                 }
             } else {
@@ -462,7 +488,7 @@ int main(int argc, char* argv[]) {
                 if ( duration_count >= config.unlock_duration ) {
                     std::cout << "[ SYSTEM ] Transitioning to ACTIVE (Unlocking)" << std::endl;
                     current_state = ACTIVE;
-                    execute_command( config.unlock_cmd, config.display );
+                    execute_command( config.unlock_cmd, config.display, config.xauthority );
                     duration_count = 0;
                 }
             } else {
@@ -473,7 +499,7 @@ int main(int argc, char* argv[]) {
         // Proximity Command
         if ( current_state == ACTIVE && !config.prox_cmd.empty() ) {
             if ( now - last_prox_time >= config.prox_interval ) {
-                execute_command( config.prox_cmd, config.display );
+                execute_command( config.prox_cmd, config.display, config.xauthority );
                 last_prox_time = now;
             }
         }
