@@ -93,9 +93,39 @@ Options:
 
 Configuration is automatically saved to `~/.blueproximity/config` after the first run with valid arguments, or can be managed via command-line arguments.
 
+### Recommended Commands
+
+**For systemd services or headless environments:**
+
+These commands work reliably when running as a systemd service without X11 session access:
+
+```bash
+--lock-cmd "loginctl lock-session"
+--unlock-cmd "loginctl unlock-session"
+--prox-cmd "systemd-inhibit --what=idle --who=BlueProximity --why='Device in proximity' sleep 0.1"
+```
+
+**For X11 desktop sessions:**
+
+These commands provide more direct display control when running in a user X11 session:
+
+```bash
+--lock-cmd "loginctl lock-session"
+--unlock-cmd "loginctl unlock-session" 
+--prox-cmd "xset dpms force on"
+```
+
+Note: The `xset` command requires `DISPLAY` and `XAUTHORITY` environment variables and won't work in systemd system services. The application auto-detects these values when available, but systemd services lack X11 authorization. Use `systemd-inhibit` for services.
+
 ## Known Issues
 
 On my phone it showed an "unable to connect message" which got annoying fast. I just used my watch. It worked well enough for a holiday time off passion project.
+
+## NON-GOALS
+
+**Windows Support:**
+
+Investigated this on Windows, where there was no limit of bullshit lagoons to cross. Possible but annoying. Aborted.
 
 ## Technical Debt / Unresolved
 
