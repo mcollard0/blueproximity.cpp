@@ -126,6 +126,25 @@ std::string detect_desktop_environment() {
 }
 
 void setup_desktop_commands( ConfigFile::GlobalConfig& config ) {
+    // Detect and cache DISPLAY if not already set
+    if ( config.display.empty() ) {
+        const char* display_env = getenv( "DISPLAY" );
+        if ( display_env ) {
+            config.display = display_env;
+            std::cout << "[ SYSTEM ] Detected DISPLAY: " << config.display << std::endl;
+        } else {
+            // Try to detect from active sessions
+            std::string detected_display = exec_command_output( "w -h | grep -m1 tty | awk '{print $3}'" );
+            if ( detected_display.empty() || detected_display == "-" ) {
+                detected_display = ":0"; // Default fallback
+            }
+            config.display = detected_display;
+            std::cout << "[ SYSTEM ] DISPLAY not set, using detected/default: " << config.display << std::endl;
+        }
+    } else {
+        std::cout << "[ SYSTEM ] Using configured DISPLAY: " << config.display << std::endl;
+    }
+    
     // Only detect if not already set
     if ( config.desktop_environment.empty() ) {
         config.desktop_environment = detect_desktop_environment();
@@ -176,10 +195,16 @@ void print_help(const char* prog_name) {
               << "  -h, --help                   Show this help message\n";
 }
 
-void execute_command( const std::string& cmd ) {
+void execute_command( const std::string& cmd, const std::string& display = "" ) {
     if ( cmd.empty() ) return;
     std::cout << "[ SYSTEM ] Executing: " << cmd << std::endl;
-    std::string bg_cmd = cmd + " &";
+    
+    std::string full_cmd = cmd;
+    if ( !display.empty() ) {
+        full_cmd = "DISPLAY=" + display + " " + cmd;
+    }
+    
+    std::string bg_cmd = full_cmd + " &";
     int ret = system( bg_cmd.c_str() );
     if ( ret == -1 ) {
         std::cerr << "Error: system() call failed (fork failure)" << std::endl;
@@ -424,7 +449,7 @@ int main(int argc, char* argv[]) {
                 if ( duration_count >= config.lock_duration ) {
                     std::cout << "[ SYSTEM ] Transitioning to GONE (Locking)" << std::endl;
                     current_state = GONE;
-                    execute_command( config.lock_cmd );
+                    execute_command( config.lock_cmd, config.display );
                     duration_count = 0;
                 }
             } else {
@@ -437,7 +462,7 @@ int main(int argc, char* argv[]) {
                 if ( duration_count >= config.unlock_duration ) {
                     std::cout << "[ SYSTEM ] Transitioning to ACTIVE (Unlocking)" << std::endl;
                     current_state = ACTIVE;
-                    execute_command( config.unlock_cmd );
+                    execute_command( config.unlock_cmd, config.display );
                     duration_count = 0;
                 }
             } else {
@@ -448,7 +473,7 @@ int main(int argc, char* argv[]) {
         // Proximity Command
         if ( current_state == ACTIVE && !config.prox_cmd.empty() ) {
             if ( now - last_prox_time >= config.prox_interval ) {
-                execute_command( config.prox_cmd );
+                execute_command( config.prox_cmd, config.display );
                 last_prox_time = now;
             }
         }

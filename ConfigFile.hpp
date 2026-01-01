@@ -38,6 +38,7 @@ public:
         int buffer_size = 1;
         bool debug = false;
         std::string desktop_environment; // "gnome", "kde", or custom
+        std::string display; // X11 DISPLAY environment variable
         std::vector<DeviceConfig> devices;
     };
 
