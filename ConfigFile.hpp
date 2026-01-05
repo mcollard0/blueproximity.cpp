@@ -39,6 +39,7 @@ public:
         bool debug = false;
         std::string desktop_environment; // "gnome", "kde", or custom
         std::string display; // X11 DISPLAY environment variable
+        std::string xauthority; // X11 XAUTHORITY file path
         std::vector<DeviceConfig> devices;
     };
 
