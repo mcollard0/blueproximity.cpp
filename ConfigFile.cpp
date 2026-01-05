@@ -50,6 +50,7 @@ ConfigFile::GlobalConfig ConfigFile::load(const std::string& path) {
             else if ( key == "buffer_size" ) config.buffer_size = std::stoi( val );
             else if ( key == "debug" ) config.debug = ( val == "1" || val == "true" );
             else if ( key == "desktop_environment" ) config.desktop_environment = val;
+            else if ( key == "display" ) config.display = val;
         }
     }
     if (in_device && !current_device.mac.empty()) {
@@ -75,6 +76,9 @@ void ConfigFile::save( const std::string& path, const GlobalConfig& config ) {
     file << "debug=" << ( config.debug ? "true" : "false" ) << "\n";
     if ( !config.desktop_environment.empty() ) {
         file << "desktop_environment=" << config.desktop_environment << "\n";
+    }
+    if ( !config.display.empty() ) {
+        file << "display=" << config.display << "\n";
     }
 
     for (const auto& dev : config.devices) {
