@@ -6,7 +6,7 @@ ConfigFile::GlobalConfig ConfigFile::load(const std::string& path) {
     // Set defaults
     config.lock_cmd = "loginctl lock-session";
     config.unlock_cmd = "loginctl unlock-session";
-    config.prox_cmd = "xset dpms force on";
+    config.prox_cmd = "systemd-inhibit --what=idle --who=BlueProximity --why='Device in proximity' sleep 0.1";
 
     std::ifstream file(path);
     if (!file.is_open()) return config;

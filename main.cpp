@@ -180,7 +180,7 @@ void setup_desktop_commands( ConfigFile::GlobalConfig& config ) {
         if ( config.desktop_environment == "gnome" ) {
             if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
             if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
-            if ( config.prox_cmd.empty() ) config.prox_cmd = "xset dpms force on";
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "systemd-inhibit --what=idle --who=BlueProximity --why='Device in proximity' sleep 0.1";
         } else if ( config.desktop_environment == "kde" ) {
             if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
             if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
@@ -188,12 +188,12 @@ void setup_desktop_commands( ConfigFile::GlobalConfig& config ) {
         } else if ( config.desktop_environment == "cosmic" ) {
             if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
             if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
-            if ( config.prox_cmd.empty() ) config.prox_cmd = "loginctl unlock-session"; // Keep screen awake by simulating activity
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "systemd-inhibit --what=idle --who=BlueProximity --why='Device in proximity' sleep 0.1";
         } else {
             // Unknown/custom DE - use loginctl as fallback
             if ( config.lock_cmd.empty() ) config.lock_cmd = "loginctl lock-session";
             if ( config.unlock_cmd.empty() ) config.unlock_cmd = "loginctl unlock-session";
-            if ( config.prox_cmd.empty() ) config.prox_cmd = "xset dpms force on";
+            if ( config.prox_cmd.empty() ) config.prox_cmd = "systemd-inhibit --what=idle --who=BlueProximity --why='Device in proximity' sleep 0.1";
         }
     }
 }
